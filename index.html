@@ -83,6 +83,7 @@ input,select,textarea{background:var(--soft);border:1px solid var(--line);border
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 textarea{min-height:60px;resize:vertical}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.bchips{align-items:center}.bclab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;opacity:.7;margin-right:2px}.chip i{font-style:normal;opacity:.65;margin-left:3px;font-size:12px}.chip.on i{opacity:.9}.bckey{font-size:11px;opacity:.55;margin:0 4px}.rmb{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between}.rmb+.rmb{margin-top:6px}td.bad{color:#C2410C;font-weight:700}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:3px 12px;cursor:pointer;font-size:13.5px}
 .chip.on{background:var(--navy);color:var(--navy-ink);border-color:var(--navy)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
@@ -127,7 +128,8 @@ body.dragging{user-select:none;-webkit-user-select:none;cursor:crosshair}
 table.sheet td.stp{background:#FFFF00!important;color:#000;font-weight:500}
 table.sheet td.stg{background:#00B050!important;color:#000;font-weight:500}
 table.sheet td.sup{min-width:210px}
-table.sheet tr:hover td.stp,table.sheet tr:hover td.stg{filter:brightness(.97)}
+table.sheet td.stpd{background:#00B0F0!important;color:#000;font-weight:700}
+table.sheet tr:hover td.stp,table.sheet tr:hover td.stg,table.sheet tr:hover td.stpd{filter:brightness(.97)}
 table.entry tr.pasted td{background:#E6F6EA}
 table.entry tr.pasted td.n::after{content:' •';color:#1F7A5C}
 table.entry input.warn{background:#FBEBCB}
@@ -293,10 +295,10 @@ function parseAmt(v){if(v==null||String(v).trim()==='')return{v:null,bad:false};
   const n=Number(String(v).replace(/[₱$,\s]/g,''));return isNaN(n)?{v:null,bad:true}:{v:n,bad:false}}
 
 /* ---------- constants ---------- */
-const STATUS=['For Transmission','Transmitted to AP','Received by AP','Partially Received','Pending Confirmation','For Verification','Incomplete Documents','Discrepancy / For Follow-up','Cancelled / Returned'];
+const STATUS=['For Transmission','Transmitted to AP','Received by AP','Partially Received','Pending Confirmation','For Verification','Incomplete Documents','Discrepancy / For Follow-up','Cancelled / Returned','Paid','Returned to Buyer'];
 const PENDING=['Transmitted to AP','Pending Confirmation','Partially Received'];
-const SCOL={'Received by AP':'ok','Transmitted to AP':'wait','Pending Confirmation':'wait','Partially Received':'wait','For Verification':'info','Incomplete Documents':'bad','Discrepancy / For Follow-up':'bad','Cancelled / Returned':'mute','For Transmission':'mute'};
-const SHEX={'Received by AP':'#1F7A5C','Transmitted to AP':'#C98A2B','Pending Confirmation':'#E0B050','Partially Received':'#B87333','For Verification':'#2F5F94','Incomplete Documents':'#A8362B','Discrepancy / For Follow-up':'#7A3B8F','Cancelled / Returned':'#8896A3','For Transmission':'#B4BEC8'};
+const SCOL={'Paid':'ok','Returned to Buyer':'bad','Received by AP':'ok','Transmitted to AP':'wait','Pending Confirmation':'wait','Partially Received':'wait','For Verification':'info','Incomplete Documents':'bad','Discrepancy / For Follow-up':'bad','Cancelled / Returned':'mute','For Transmission':'mute'};
+const SHEX={'Paid':'#1B5E9E','Returned to Buyer':'#C2410C','Received by AP':'#1F7A5C','Transmitted to AP':'#C98A2B','Pending Confirmation':'#E0B050','Partially Received':'#B87333','For Verification':'#2F5F94','Incomplete Documents':'#A8362B','Discrepancy / For Follow-up':'#7A3B8F','Cancelled / Returned':'#8896A3','For Transmission':'#B4BEC8'};
 const BUYERS=[{n:'Arlene',role:'Buyer',t:'Ms.'},{n:'Ellaris',role:'Buyer',t:'Ms.'},{n:'Carla',role:'Senior Buyer',t:'Ms.'},{n:'Sherwin',role:'Senior Buyer',t:'Mr.'},{n:'Frayla',role:'Buyer',t:'Ms.'},{n:'Vanesa',role:'Proc. Manager',t:'Ms.'}];
 const buyerTitle=n=>{const b=BUYERS.find(x=>x.n===n);return b&&b.t?b.t:''};
 const buyerFull=n=>n?((buyerTitle(n)?buyerTitle(n)+' ':'')+n):'';
@@ -309,7 +311,7 @@ const buyerOptionsHTML=(cur,blank)=>`<option value="">${blank}</option>`+buyerNa
 const LABEL={buyer:'Buyer',sbu:'SBU',delivDate:'Delivery date',dateRecv:'Date received',supplier:'Supplier',poNo:'PO#',siNo:'SI# (supplier invoice)',siDate:'SI date',drNo:'DR#',rr:'RR #',amount:'Amount',terms:'Payment terms',dateTx:'Date transmitted',payStatus:'STATUS (column N)',txBy:'Transmitted by',batch:'Batch / transmittal no.',status:'Status',dateRx:'Date received by AP',rxBy:'Received by (AP)',rxRef:'Receiving ref / logbook no.',condition:'Document condition',fuOwner:'Follow-up owner',fuTarget:'Follow-up target date',fuStatus:'Follow-up status',remarks:'Remarks',confirmed:'Receipt confirmed by me without file'};
 const PRESETS={
  pending:{label:'Pending AP receipt',fn:d=>d._pending},
- week:{label:'Received this week',fn:d=>d.status==='Received by AP'&&d.dateRx&&d.dateRx>=addDays(todayStr(),-6)},
+ week:{label:'Received this week',fn:d=>isRx(d)&&d.dateRx&&d.dateRx>=addDays(todayStr(),-6)},
  noevid:{label:'Missing receiving evidence',fn:d=>d._flags.includes('No receiving evidence')},
  overdue:{label:'Overdue',fn:d=>d._overdue},
  issues:{label:'Incomplete or discrepant',fn:d=>['Incomplete Documents','Discrepancy / For Follow-up','For Verification'].includes(d.status)},
@@ -433,9 +435,12 @@ const newTid=()=>{S.cfg.counter++;return'TRK-'+String(S.cfg.counter).padStart(4,
 const edges=()=>S.cfg.buckets;
 function bucketLabels(){const[a,b,c]=edges();return['0–'+a+' days',(a+1)+'–'+b+' days',(b+1)+'–'+c+' days','Over '+c+' days']}
 function bucketOf(n){if(n==null)return null;const[a,b,c]=edges();return n<=a?0:n<=b?1:n<=c?2:3}
+const isRx=d=>!!d&&(d.status==='Received by AP'||d.status==='Paid');
 const siKey=d=>{const n=norm(d.siNo);return(n&&n!=='N/A'&&n!=='NA')?norm(d.supplier)+'|'+n:''};
 function remarksText(d){
-  if(d.status==='Received by AP'){
+  if(d.status==='Returned to Buyer')return'Returned to Buyer'+(d.remarks?': '+d.remarks:'');
+  if(d.status==='Paid')return'PAID'+(d.rxBy?' · received by '+d.rxBy+(d.dateRx?' on '+longDate(d.dateRx):''):'')+(d.remarks?' · '+d.remarks:'');
+  if(isRx(d)){
     if(d.rxBy)return'Received by '+d.rxBy+(d.dateRx?' on '+longDate(d.dateRx):'');
     return'Received by AP (name for verification)';
   }
@@ -454,7 +459,7 @@ function recompute(){
     d._overdue=d._pending&&od!=null&&d._days!=null&&d._days>=od;
     d._bucket=d._pending?bucketOf(d._days):null;
     const f=[];
-    if(d.status==='Received by AP'){
+    if(isRx(d)){
       if(!d.dateRx)f.push('Missing receipt date');
       if(!d.rxBy)f.push('Missing receiver name');
       if(!d.fileIds.length&&!d.confirmed)f.push('No receiving evidence');
@@ -475,7 +480,7 @@ function applyF(docs,f){
   const q=f.q.trim().toLowerCase();
   return docs.filter(d=>{
     if(q){const h=[d.tid,d.batch,d.buyer,d.payStatus,d.sbu,d.poNo,d.siNo,d.drNo,d.rr,d.supplier,d.rxBy,d.txBy,d.dateTx,d.dateRx,fu(d.dateTx),fu(d.dateRx),fd(d.dateTx),fd(d.dateRx)].join(' ').toLowerCase();if(!h.includes(q))return false}
-    for(const k of['buyer','sbu','supplier','rxBy','txBy','status','payStatus'])if(f[k]&&gkey(k,d[k])!==f[k])return false;
+    for(const k of['buyer','sbu','supplier','rxBy','txBy','status','payStatus'])if(f[k]&&(k==='buyer'&&f[k]==='__none'?!!String(d.buyer||'').trim():gkey(k,d[k])!==f[k]))return false;
     if(f.from&&(!d.dateTx||d.dateTx<f.from))return false;
     if(f.to&&(!d.dateTx||d.dateTx>f.to))return false;
     if(f.preset&&PRESETS[f.preset]&&!PRESETS[f.preset].fn(d))return false;
@@ -484,13 +489,13 @@ function applyF(docs,f){
 }
 const uniq=k=>[...new Set(S.docs.map(d=>gkey(k,d[k])).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 const sumAmt=l=>l.reduce((a,d)=>a+(Number(d.amount)||0),0);
-const batches=docs=>{const m={};docs.filter(d=>d.batch&&d.status!=='Cancelled / Returned').forEach(d=>(m[d.batch]=m[d.batch]||[]).push(d));return Object.entries(m).map(([b,l])=>{const r=l.filter(d=>d.status==='Received by AP').length;return{batch:b,total:l.length,rec:r,amt:sumAmt(l),state:r===l.length?'All received':r?'Partially received':'None received'}})};
+const batches=docs=>{const m={};docs.filter(d=>d.batch&&d.status!=='Cancelled / Returned').forEach(d=>(m[d.batch]=m[d.batch]||[]).push(d));return Object.entries(m).map(([b,l])=>{const r=l.filter(d=>isRx(d)).length;return{batch:b,total:l.length,rec:r,amt:sumAmt(l),state:r===l.length?'All received':r?'Partially received':'None received'}})};
 const mergeKey=d=>{const t=remarksText(d);return t?t+'|'+d.dateTx:''};
 const statusKeys=(docs,mk)=>docs.map((d,i)=>mk[i]&&d.payStatus?mk[i]+'|'+d.payStatus:'');
 const stU=t=>String(t||'').trim().toUpperCase();
-const stClass=t=>{const u=stU(t);return u==='PENDING'?'stp':u==='PAYMENT FOR PROCESS'?'stg':''};
-const stARGB=t=>{const u=stU(t);return u==='PENDING'?'FFFFFF00':u==='PAYMENT FOR PROCESS'?'FF00B050':null};
-const stRGB=t=>{const u=stU(t);return u==='PENDING'?[255,255,0]:u==='PAYMENT FOR PROCESS'?[0,176,80]:null};
+const stClass=t=>{const u=stU(t);return u==='PENDING'?'stp':u==='PAYMENT FOR PROCESS'?'stg':u==='PAID'?'stpd':''};
+const stARGB=t=>{const u=stU(t);return u==='PENDING'?'FFFFFF00':u==='PAYMENT FOR PROCESS'?'FF00B050':u==='PAID'?'FF00B0F0':null};
+const stRGB=t=>{const u=stU(t);return u==='PENDING'?[255,255,0]:u==='PAYMENT FOR PROCESS'?[0,176,80]:u==='PAID'?[0,176,240]:null};
 function runsOf(keys){const out=[];let i=0;while(i<keys.length){let n=1;if(keys[i])while(i+n<keys.length&&keys[i+n]===keys[i])n++;out.push({start:i,n});i+=n}return out}
 
 /* ---------- ui scaffolding ---------- */
@@ -528,11 +533,10 @@ const applyTheme=()=>{document.documentElement.setAttribute('data-theme',S.cfg.t
 function filterBar(){
   const sel=(k,l,opts)=>`<label class="f">${l}<select data-f="${k}"><option value="">All</option>${opts.map(o=>`<option ${F[k]===o?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;
   const act=['buyer','sbu','supplier','rxBy','txBy','status','payStatus','from','to'].filter(k=>F[k]).length;
-  const chips=S.view==='dashboard'?'':`<div class="chips">${Object.entries(PRESETS).filter(([k])=>k!=='new'||S.newIds.size).map(([k,p])=>`<button class="chip ${F.preset===k?'on':''}" data-a="preset" data-k="${k}">${p.label}</button>`).join('')}
-   ${S.cfg.views.map((v,i)=>`<button class="chip" data-a="loadview" data-i="${i}">${esc(v.name)}</button>`).join('')}
-   <button class="chip" data-a="saveview">+ Save current filters</button><button class="chip" data-a="clearf">Clear filters</button></div>`;
+  const bn=buyerNames(),bc=n=>S.docs.filter(d=>n==='__none'?!String(d.buyer||'').trim():gkey('buyer',d.buyer)===n).length;
+  const chips=`<div class="chips bchips"><span class="bclab">Buyer</span><button class="chip ${!F.buyer?'on':''}" data-a="bchip" data-b="" title="All buyers · Alt+0">All <i>${S.docs.length}</i></button>${bn.map((n,i)=>`<button class="chip ${F.buyer===n?'on':''}" data-a="bchip" data-b="${esc(n)}" title="${esc(buyerLabel(n))}${i<9?' · Alt+'+(i+1):''}">${esc(n)} <i>${bc(n)}</i></button>`).join('')}<button class="chip ${F.buyer==='__none'?'on':''}" data-a="bchip" data-b="__none" title="No buyer yet">Unassigned <i>${bc('__none')}</i></button><span class="bckey">Alt+0–${Math.min(9,bn.length)}</span><button class="chip" data-a="clearf">Clear filters</button></div>`;
   return `<details class="fdet" ${act||(S.view==='dashboard'&&(F.preset||F.q))?'open':''}><summary>Filters${act?' · '+act+' active':''}${F.q?' · search “'+esc(F.q)+'”':''}</summary><div class="filters">
-   <label class="f">Buyer<select data-f="buyer"><option value="">All</option>${buyerNames().map(n=>`<option value="${esc(n)}" ${F.buyer===n?'selected':''}>${esc(buyerLabel(n))}</option>`).join('')}</select></label>${sel('sbu','SBU',uniq('sbu'))}${sel('status','Receipt status',STATUS)}${sel('supplier','Supplier',uniq('supplier'))}${sel('payStatus','Status (column N)',uniq('payStatus'))}${sel('rxBy','Received by (AP)',uniq('rxBy'))}${sel('txBy','Transmitted by',uniq('txBy'))}
+   <label class="f">Buyer<select data-f="buyer"><option value="">All</option>${buyerNames().map(n=>`<option value="${esc(n)}" ${F.buyer===n?'selected':''}>${esc(buyerLabel(n))}</option>`).join('')}<option value="__none" ${F.buyer==='__none'?'selected':''}>Unassigned</option></select></label>${sel('sbu','SBU',uniq('sbu'))}${sel('status','Receipt status',STATUS)}${sel('supplier','Supplier',uniq('supplier'))}${sel('payStatus','Status (column N)',uniq('payStatus'))}${sel('rxBy','Received by (AP)',uniq('rxBy'))}${sel('txBy','Transmitted by',uniq('txBy'))}
    <label class="f">Transmitted from<input type="date" data-f="from" value="${F.from}"></label><label class="f">Transmitted to<input type="date" data-f="to" value="${F.to}"></label>
   </div></details>${chips}`;
 }
@@ -551,7 +555,7 @@ function renderOut(){recompute();const o=$('#out');if(!o)return;const v=S.view;
   const L=applyF(S.docs,F);
   if(v==='dashboard')o.innerHTML=dashHTML(L);
   else if(v==='register')o.innerHTML=newBanner()+sheetTable(L,{count:true,extra:['RR #']});
-  else if(v==='log')o.innerHTML=sheetTable(L.filter(d=>d.status==='Received by AP'),{count:true,extra:['RR #','Evidence']})+batchHTML(L);
+  else if(v==='log')o.innerHTML=sheetTable(L.filter(d=>isRx(d)),{count:true,extra:['RR #','Evidence']})+batchHTML(L);
   else if(v==='pending')o.innerHTML=sheetTable(L.filter(d=>d._pending),{count:true,extra:['RR #','Business days','Receipt status']})+batchHTML(L);
   else if(v==='verify')o.innerHTML=sheetTable(L.filter(d=>(d._flags.length&&d.status!=='Cancelled / Returned')||['Discrepancy / For Follow-up','Incomplete Documents'].includes(d.status)),{count:true,extra:['RR #','Receipt status','Flags']});
   else if(v==='buyers'){o.innerHTML=buyersHTML();runBuyerLog()}
@@ -652,12 +656,12 @@ function lineChart(pts){
 const stPill=t=>{const c=stClass(t);return t?`<span class="chpill" style="${c==='stp'?'background:#FFFF00;color:#000':c==='stg'?'background:#00B050;color:#000':'background:var(--mute-bg);color:var(--muted)'}">${esc(t)}</span>`:'<span class="muted">—</span>'};
 function dashHTML(L){
   const live=L.filter(d=>d.status!=='Cancelled / Returned');
-  const txd=live.filter(d=>d.dateTx&&d.status!=='For Transmission'),rec=live.filter(d=>d.status==='Received by AP'),pend=live.filter(d=>d._pending);
-  const recTx=txd.filter(d=>d.status==='Received by AP');
+  const txd=live.filter(d=>d.dateTx&&d.status!=='For Transmission'),rec=live.filter(d=>isRx(d)),pend=live.filter(d=>d._pending);
+  const recTx=txd.filter(d=>isRx(d));
   const amtTx=sumAmt(txd),amtRec=sumAmt(recTx),amtPend=sumAmt(pend);
   const pb=batches(L).filter(b=>b.state==='Partially received').length;
   const ver=live.filter(d=>d.status==='For Verification').length,inc=live.filter(d=>d.status==='Incomplete Documents').length,fu_=live.filter(d=>d.status==='Discrepancy / For Follow-up'||(d.fuStatus&&d.fuStatus!=='Closed'&&d.fuOwner)).length,od=live.filter(d=>d._overdue).length;
-  const noEv=live.filter(d=>d.status==='Received by AP'&&!d.fileIds.length).length;
+  const noEv=live.filter(d=>isRx(d)&&!d.fileIds.length).length;
   const go=p=>`data-a="goto" data-p="${p}"`;
   const kpi=(cls,title,body,p)=>`<div class="kpi ${cls}" ${go(p)}><h4>${title}</h4>${body}</div>`;
   const kpis=`<div class="kpis">
@@ -732,11 +736,11 @@ function openTx(){
     <label class="f">Batch / transmittal no.<input id="tx_b" placeholder="Auto: TX-yyyymmdd"></label>
     <label class="f">Received by (AP) name<input id="tx_rb" placeholder="e.g. Ma'am Rita"></label>
     <label class="f">Date received by AP<input type="date" id="tx_rd"></label>
-    <label class="f">STATUS (column N, all rows)<input id="tx_ps" list="pslist" placeholder="PENDING / PAYMENT FOR PROCESS"></label>
+    <label class="f">STATUS (column N, all rows)<input id="tx_ps" list="pslist" placeholder="PENDING / PAYMENT FOR PROCESS / PAID"></label>
     <label class="f">Buyer (rows without their own buyer)<select id="tx_buyer">${buyerOptionsHTML(defBuyer(),'Unassigned')}</select></label>
     <label class="f">Remarks (column M, all rows)<input id="tx_rm" placeholder="e.g. NEED TO RE-INVOICE"></label>
    </div>
-   <datalist id="pslist"><option>PENDING</option><option>PAYMENT FOR PROCESS</option></datalist>
+   <datalist id="pslist"><option>PENDING</option><option>PAYMENT FOR PROCESS</option><option>PAID</option></datalist>
    <div class="row" style="margin:0 0 8px;align-items:center"><button type="button" class="btn sm pri" data-a="rmpull">Pull new entries from Receiving Monitoring</button><span class="muted" style="font-size:13px">Adds invoices received there that have no proof of AP receipt and are not in this tracker yet. SI date, delivery date and terms stay for you to fill in.</span></div>
    <details class="fdet" open><summary>Paste rows from Excel</summary>
     <textarea id="tx_paste" class="copybox" style="min-height:70px;margin-top:8px" placeholder="Copy rows in Excel (No. to Received by, or just SBU to Payment Terms), click here and press Ctrl+V. The rows are added to the grid below and highlighted green."></textarea>
@@ -772,9 +776,9 @@ async function pullRM(){
   txSnap('Pull from Receiving Monitoring');
   const isEmpty=r=>!TXF.some(k=>String(r[k]||'').trim()!=='');
   todo.forEach(r=>{let row=TXM.rows.find(isEmpty);if(!row){row=blankRow();TXM.rows.push(row)}
-    Object.assign(row,{sbu:r.sbu||'',dateRecv:fu(r.date_recv),supplier:r.supplier||'',poNo:r.po||'',siNo:String(r.si||'').split(', ')[0],drNo:/^(n\/?a|na)$/i.test(String(r.dr||'').trim())?'N/A':(r.dr||''),amount:r.amount==null?'':String(r.amount),rr:r.rr||'',buyer:(buyerNames().find(n=>n.toLowerCase()===String(r.buyer||'').trim().toLowerCase())||'')});row._n=true});
+    Object.assign(row,{sbu:r.sbu||'',dateRecv:fu(r.date_recv),supplier:r.supplier||'',poNo:r.po||'',siNo:String(r.si||'').split(', ')[0],drNo:/^(n\/?a|na)$/i.test(String(r.dr||'').trim())?'N/A':(r.dr||''),amount:'',rr:r.rr||'',buyer:(buyerNames().find(n=>n.toLowerCase()===String(r.buyer||'').trim().toLowerCase())||'')});row._n=true});
   txRender();
-  const noAmt=todo.filter(r=>r.amount==null).length,bc={};todo.forEach(r=>{const k=r.buyer||'no buyer';bc[k]=(bc[k]||0)+1});toast(`${todo.length} new entr${todo.length===1?'y':'ies'} added from Receiving Monitoring (one row per SI, with its own RR). Fill in SI date, delivery date and terms.`+` Buyers kept from Receiving Monitoring: ${Object.entries(bc).map(([k,n])=>k+' '+n).join(', ')}.`+(noAmt?` ${noAmt} row(s) share one quantity with another SI, so type their amount yourself.`:'')+(inAp?` ${inAp} more are already in the tracker without proof of AP receipt: see Transmittal Form → "Needs transmittal".`:''))}
+  const noAmt=todo.filter(r=>r.amount==null).length,bc={};todo.forEach(r=>{const k=r.buyer||'no buyer';bc[k]=(bc[k]||0)+1});toast(`${todo.length} new entr${todo.length===1?'y':'ies'} added from Receiving Monitoring (one row per SI, with its own RR). Type the amount from the SI, and fill in SI date, delivery date and terms.`+` Buyers kept from Receiving Monitoring: ${Object.entries(bc).map(([k,n])=>k+' '+n).join(', ')}.`+(inAp?` ${inAp} more are already in the tracker without proof of AP receipt: see Transmittal Form → "Needs transmittal".`:''))}
 function parsePaste(text){
   const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');const out=[];let meta={};
   lines.forEach(l=>{
@@ -896,7 +900,7 @@ async function submitTx(){
 /* ---------- buyer log ---------- */
 const BL={sel:'all',from:'',to:''};
 const entDate=d=>d.createdAt?ymd(new Date(d.createdAt)):'';
-function buyerStats(list){const live=list.filter(d=>d.status!=='Cancelled / Returned');return{n:live.length,amt:sumAmt(live),pend:live.filter(d=>d._pending).length,rec:live.filter(d=>d.status==='Received by AP').length,ver:live.filter(d=>['For Verification','Incomplete Documents','Discrepancy / For Follow-up'].includes(d.status)).length}}
+function buyerStats(list){const live=list.filter(d=>d.status!=='Cancelled / Returned');return{n:live.length,amt:sumAmt(live),pend:live.filter(d=>d._pending).length,rec:live.filter(d=>isRx(d)).length,ver:live.filter(d=>['For Verification','Incomplete Documents','Discrepancy / For Follow-up'].includes(d.status)).length}}
 function buyerDocs(){
   let l=S.docs.slice();
   if(BL.sel==='none')l=l.filter(d=>!d.buyer);else if(BL.sel!=='all')l=l.filter(d=>d.buyer===BL.sel);
@@ -943,7 +947,7 @@ function formSources(){
   const latest=l=>l.map(d=>d.dateTx||'').sort().pop()||'';
   Object.entries(bs).sort((a,b)=>latest(b[1]).localeCompare(latest(a[1]))).slice(0,30).forEach(([b,l])=>out.push({k:'batch:'+b,l:`Batch ${b} (${l.length} rows)`,rows:l}));
   [...new Set(live.map(d=>d.dateTx).filter(Boolean))].sort().reverse().slice(0,20).forEach(dt=>{const l=live.filter(d=>d.dateTx===dt);out.push({k:'date:'+dt,l:`Transmitted ${fu(dt)} (${l.length} rows)`,rows:l})});
-  const noproof=live.filter(d=>!(d.status==='Received by AP'&&(d.fileIds.length||d.confirmed)));if(noproof.length)out.push({k:'noproof',l:`Needs transmittal: no proof AP received it (${noproof.length} rows)`,rows:noproof});
+  const noproof=live.filter(d=>!(isRx(d)&&(d.fileIds.length||d.confirmed)));if(noproof.length)out.push({k:'noproof',l:`Needs transmittal: no proof AP received it (${noproof.length} rows)`,rows:noproof});
   const pend=live.filter(d=>d._pending);if(pend.length)out.push({k:'pending',l:`All pending AP receipt (${pend.length} rows)`,rows:pend});
   return out;
 }
@@ -995,7 +999,7 @@ const fileIcon=f=>/\.pdf$/i.test(f.name)?'📄':/\.(xlsx|xls|csv)$/i.test(f.name
 function evidenceHTML(){
   const q=EQ.trim().toLowerCase();
   const items=S.files.map(f=>({f,rows:linkedRows(f.id)})).filter(x=>{if(!q)return true;return[x.f.name,...x.rows.flatMap(d=>[d.supplier,d.poNo,d.siNo,d.rxBy,d.tid,d.batch])].join(' ').toLowerCase().includes(q)}).sort((a,b)=>b.f.addedAt.localeCompare(a.f.addedAt));
-  const recv=S.docs.filter(d=>d.status==='Received by AP');
+  const recv=S.docs.filter(d=>isRx(d));
   const noFile=recv.filter(d=>!d.fileIds.length);
   const card=(n,l,c)=>`<div class="card ${c}" style="cursor:default"><b>${n}</b><span>${l}</span></div>`;
   return `<div class="cards">${card(S.files.length,'Evidence files stored','')}${card(S.docs.filter(d=>d.fileIds.length).length,'Rows with a file attached','ok')}${card(noFile.filter(d=>d.confirmed).length,'Received on your confirmation only (no file)','wait')}${card(noFile.filter(d=>!d.confirmed).length,'Received with no evidence at all','bad')}</div>
@@ -1065,9 +1069,9 @@ function openForm(d,prefill){
   formState={id:isNew?null:d.id,prefill:prefill||[],dupOk:false};
   const inp=(k,t,extra='')=>`<label class="f">${LABEL[k]}<input name="${k}" type="${t||'text'}" value="${esc(d[k])}" ${extra}></label>`;
   modal(`<h2>${isNew?'New record':'Edit '+esc(d.tid)}</h2><form id="rf" autocomplete="off"><div id="ferr"></div>
-   <div class="fg">${inp('sbu')}${inp('delivDate','date')}${inp('dateRecv','date')}${inp('supplier')}${inp('poNo')}${inp('siNo')}${inp('siDate','date')}${inp('drNo','text','placeholder="N/A or w/ CR"')}${inp('rr','text','placeholder="Receiving report no."')}${inp('amount','number','step="0.01" min="0"')}${inp('terms','text','list="termlist2" placeholder="30 DAYS"')}${inp('dateTx','date')}${inp('txBy')}${inp('batch')}${inp('payStatus','text','list="pslist" placeholder="PENDING / PAYMENT FOR PROCESS"')}<label class="f">${LABEL.buyer}<select name="buyer">${buyerOptionsHTML(d.buyer||(isNew?defBuyer():''),'Unassigned')}</select></label>
+   <div class="fg">${inp('sbu')}${inp('delivDate','date')}${inp('dateRecv','date')}${inp('supplier')}${inp('poNo')}${inp('siNo')}${inp('siDate','date')}${inp('drNo','text','placeholder="N/A or w/ CR"')}${inp('rr','text','placeholder="Receiving report no."')}${inp('amount','number','step="0.01" min="0"')}${inp('terms','text','list="termlist2" placeholder="30 DAYS"')}${inp('dateTx','date')}${inp('txBy')}${inp('batch')}${inp('payStatus','text','list="pslist" placeholder="PENDING / PAYMENT FOR PROCESS / PAID"')}<label class="f">${LABEL.buyer}<select name="buyer">${buyerOptionsHTML(d.buyer||(isNew?defBuyer():''),'Unassigned')}</select></label>
     <label class="f">${LABEL.status}<select name="status">${opt(STATUS,d.status)}</select></label></div>
-   <datalist id="pslist"><option>PENDING</option><option>PAYMENT FOR PROCESS</option></datalist><datalist id="termlist2"><option>30 DAYS</option><option>15 DAYS</option><option>45 DAYS</option><option>60 DAYS</option><option>COD</option></datalist>
+   <datalist id="pslist"><option>PENDING</option><option>PAYMENT FOR PROCESS</option><option>PAID</option></datalist><datalist id="termlist2"><option>30 DAYS</option><option>15 DAYS</option><option>45 DAYS</option><option>60 DAYS</option><option>COD</option></datalist>
    <div class="sec">Receiving details (Received by / Remarks)</div>
    <p class="muted" style="margin:0 0 8px">Enter only what the receiving copy shows. Leave blank if unknown; the row stays flagged for verification.</p>
    <div class="fg">${inp('dateRx','date')}${inp('rxBy')}${inp('rxRef')}
@@ -1096,7 +1100,7 @@ async function submitForm(form){
     if(!v.rxBy)err.push('Enter the AP person who received it, or choose "For Verification".');
     if(!((existing?existing.fileIds.length:0)+nf.length)&&!v.confirmed)err.push('Attach receiving evidence, or tick the box to confirm receipt yourself. An upload alone never marks a row received.');
   }
-  if(v.status==='Cancelled / Returned'&&!v.remarks)err.push('Add the reason in Remarks.');
+  if((v.status==='Cancelled / Returned'||v.status==='Returned to Buyer')&&!v.remarks)err.push('Add the reason in Remarks.');
   const k=siKey({supplier:v.supplier,siNo:v.siNo});
   const dup=k?S.docs.find(x=>x.id!==formState.id&&x.status!=='Cancelled / Returned'&&siKey(x)===k):null;
   let warn='';
@@ -1131,7 +1135,7 @@ function openDetail(id){
    ${d._flags.length?`<p>${d._flags.map(f=>`<span class="flag">${esc(f)}</span>`).join('')}</p>`:''}
    <dl class="kv">${kv('SBU',esc(d.sbu))}${kv('PO#',esc(d.poNo))}${kv('SI#',esc(d.siNo))}${kv('SI date',fu(d.siDate))}${kv('DR#',esc(d.drNo))}${kv('RR #',esc(d.rr))}${kv('Amount',money(d.amount))}${kv('Payment terms',esc(d.terms))}${kv('Delivery date',fu(d.delivDate))}${kv('Date received',fu(d.dateRecv))}${kv('Date transmitted',fu(d.dateTx))}${kv('Transmitted by',esc(d.txBy))}${kv('Batch',esc(d.batch))}${kv('Status (column N)',esc(d.payStatus))}${kv('Buyer',d.buyer?esc(buyerLabel(d.buyer)):'')}</dl>
    <div class="sec">Received by / Remarks</div>
-   <dl class="kv">${kv('Display text',esc(remarksText(d)||(d._pending?'Pending AP confirmation':'')))}${kv('Actual date received by AP',d.dateRx?fd(d.dateRx):'')}${kv('Received by (AP)',d.rxBy?esc(d.rxBy):(d.status==='Received by AP'?'Name for verification':''))}${kv('Receiving ref / logbook',esc(d.rxRef))}${kv('Condition',esc(d.condition))}${kv('Entered in tracker',fdt(d.enteredRxAt))}${kv('Business days outstanding',d._days==null?'':String(d._days))}${kv('Basis of receipt',d.fileIds.length?'Evidence file attached':(d.confirmed?'Confirmed by user, no file':'No evidence'))}</dl>
+   <dl class="kv">${kv('Display text',esc(remarksText(d)||(d._pending?'Pending AP confirmation':'')))}${kv('Actual date received by AP',d.dateRx?fd(d.dateRx):'')}${kv('Received by (AP)',d.rxBy?esc(d.rxBy):(isRx(d)?'Name for verification':''))}${kv('Receiving ref / logbook',esc(d.rxRef))}${kv('Condition',esc(d.condition))}${kv('Entered in tracker',fdt(d.enteredRxAt))}${kv('Business days outstanding',d._days==null?'':String(d._days))}${kv('Basis of receipt',d.fileIds.length?'Evidence file attached':(d.confirmed?'Confirmed by user, no file':'No evidence'))}</dl>
    <div class="sec">Evidence files</div>
    ${files.length?`<div class="files">${files.map(f=>`<div class="file"><img alt="" data-img="${f.id}" style="${f.type.startsWith('image/')?'':'display:none'}"><b>${esc(f.name)}</b><br><span class="muted">${(f.size/1024).toFixed(0)} KB · ${fdt(f.addedAt)}</span><div class="row" style="margin-top:6px"><button class="btn sm pri" data-a="viewfile" data-id="${f.id}">View</button><button class="btn sm" data-a="savefile" data-id="${f.id}">Save copy</button><button class="btn sm dng" data-a="rmfile" data-id="${f.id}" data-d="${d.id}">Remove</button></div></div>`).join('')}</div>`:'<p class="muted">No files attached. Edit the row to attach a signed receiving copy, stamp or photo.</p>'}
    <div class="sec">Follow-up</div><dl class="kv">${kv('Owner',esc(d.fuOwner))}${kv('Target date',fd(d.fuTarget))}${kv('Follow-up status',esc(d.fuStatus))}</dl>
@@ -1333,11 +1337,11 @@ function buildReport(){
   const live=d=>d.status!=='Cancelled / Returned';const hasP=!!(RF.from||RF.to);const t=RF.type;
   let list=[],summary=[],cols,rows,merge=false,extraCols=[],aging=false;
   const cmpTx=(a,b)=>(a.dateTx||'').localeCompare(b.dateTx||'')||a.tid.localeCompare(b.tid);
-  if(t==='transmittal'){list=L.filter(d=>d.dateTx&&inP(d.dateTx)&&live(d)&&d.status!=='For Transmission').sort(cmpTx);merge=true;summary=[`${list.length} row(s) transmitted`,`${list.filter(d=>d.status==='Received by AP').length} confirmed received`,`${list.filter(d=>d._pending).length} awaiting confirmation`]}
-  else if(t==='receiving'){list=L.filter(d=>d.status==='Received by AP'&&(!hasP||inP(d.dateRx))).sort((a,b)=>(a.dateRx||'').localeCompare(b.dateRx||''));summary=[`${list.length} row(s) received by AP`,`${list.filter(d=>d._flags.length).length} with flags`]}
+  if(t==='transmittal'){list=L.filter(d=>d.dateTx&&inP(d.dateTx)&&live(d)&&d.status!=='For Transmission').sort(cmpTx);merge=true;summary=[`${list.length} row(s) transmitted`,`${list.filter(d=>isRx(d)).length} confirmed received`,`${list.filter(d=>d._pending).length} awaiting confirmation`]}
+  else if(t==='receiving'){list=L.filter(d=>isRx(d)&&(!hasP||inP(d.dateRx))).sort((a,b)=>(a.dateRx||'').localeCompare(b.dateRx||''));summary=[`${list.length} row(s) received by AP`,`${list.filter(d=>d._flags.length).length} with flags`]}
   else if(t==='pending'){list=L.filter(d=>d._pending&&(!hasP||inP(d.dateTx))).sort((a,b)=>(b._days||0)-(a._days||0));summary=[`${list.length} row(s) without confirmed receipt`,S.cfg.overdueDays==null?'Overdue threshold not set':`${list.filter(d=>d._overdue).length} at or past the ${S.cfg.overdueDays}-business-day threshold`]}
   else if(t==='aging'){list=L.filter(d=>d._pending&&(!hasP||inP(d.dateTx))).sort((a,b)=>(b._days||0)-(a._days||0));aging=true;summary=bucketLabels().map((l,i)=>`${l}: ${list.filter(d=>d._bucket===i).length}`)}
-  else if(t==='personnel'){list=L.filter(d=>d.status==='Received by AP'&&(!hasP||inP(d.dateRx))).sort((a,b)=>(a.rxBy||'zzz').localeCompare(b.rxBy||'zzz')||(a.dateRx||'').localeCompare(b.dateRx||''));summary=countBy(list,d=>d.rxBy||'Name for verification').map(x=>`${x.l}: ${x.v} row(s)`)}
+  else if(t==='personnel'){list=L.filter(d=>isRx(d)&&(!hasP||inP(d.dateRx))).sort((a,b)=>(a.rxBy||'zzz').localeCompare(b.rxBy||'zzz')||(a.dateRx||'').localeCompare(b.dateRx||''));summary=countBy(list,d=>d.rxBy||'Name for verification').map(x=>`${x.l}: ${x.v} row(s)`)}
   else if(t==='missing'){list=L.filter(d=>live(d)&&d._flags.some(f=>['Missing receipt date','Missing receiver name','No receiving evidence'].includes(f))).sort((a,b)=>a.tid.localeCompare(b.tid));summary=[`${list.length} row(s) with missing receipt details or evidence`]}
   else if(t==='discrepancy'){list=L.filter(d=>live(d)&&(d._flags.some(f=>f!=='Overdue')||['Discrepancy / For Follow-up','Incomplete Documents','For Verification'].includes(d.status))).sort((a,b)=>a.tid.localeCompare(b.tid));summary=[`${list.length} row(s) need verification or corrective action`]}
   const pend=L.filter(d=>d._pending).sort((a,b)=>(b._days||0)-(a._days||0)).slice(0,10);
@@ -1348,8 +1352,8 @@ function buildReport(){
     const ms=new Set();L.forEach(d=>{if(d.dateTx)ms.add(d.dateTx.slice(0,7));if(d.dateRx)ms.add(d.dateRx.slice(0,7))});
     const keys=[...ms].filter(m=>(!RF.from||m>=RF.from.slice(0,7))&&(!RF.to||m<=RF.to.slice(0,7))).sort();
     r.cols=['Month','Rows transmitted','Amount transmitted','Received by AP','Still pending (of those transmitted)','Unresolved flags / verification'];
-    r.rows=keys.map(m=>{const tx=L.filter(d=>live(d)&&(d.dateTx||'').startsWith(m)&&d.status!=='For Transmission');return[new Date(m+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}),tx.length,money(sumAmt(tx)),L.filter(d=>d.status==='Received by AP'&&(d.dateRx||'').startsWith(m)).length,tx.filter(d=>d._pending).length,tx.filter(d=>d._flags.some(f=>f!=='Overdue')).length]});
-    const all=L.filter(live);r.summary=[`Total tracked: ${all.length} row(s), ${money(sumAmt(all))}`,`Received by AP: ${all.filter(d=>d.status==='Received by AP').length}`,`Pending: ${all.filter(d=>d._pending).length} (${money(sumAmt(all.filter(d=>d._pending)))})`,`Unresolved: ${all.filter(d=>d._flags.some(f=>f!=='Overdue')).length}`];
+    r.rows=keys.map(m=>{const tx=L.filter(d=>live(d)&&(d.dateTx||'').startsWith(m)&&d.status!=='For Transmission');return[new Date(m+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}),tx.length,money(sumAmt(tx)),L.filter(d=>isRx(d)&&(d.dateRx||'').startsWith(m)).length,tx.filter(d=>d._pending).length,tx.filter(d=>d._flags.some(f=>f!=='Overdue')).length]});
+    const all=L.filter(live);r.summary=[`Total tracked: ${all.length} row(s), ${money(sumAmt(all))}`,`Received by AP: ${all.filter(d=>isRx(d)).length}`,`Pending: ${all.filter(d=>d._pending).length} (${money(sumAmt(all.filter(d=>d._pending)))})`,`Unresolved: ${all.filter(d=>d._flags.some(f=>f!=='Overdue')).length}`];
     return r;
   }
   if(merge){r.cols=SHEETH.slice();r.rows=list.map((d,i)=>baseRow(d,i).slice(0,13).concat(d.payStatus||''));r.mk=list.map(mergeKey);r.nk=statusKeys(list,r.mk);r.docs=list;if(RF.rr){r.rr=true;r.cols.splice(11,0,'RR #');r.rows.forEach((row,i)=>row.splice(11,0,list[i].rr||''))}}
@@ -1594,8 +1598,8 @@ const A={
    const same=k=>{const v=[...new Set(rows.map(d=>d[k]||''))];return v.length===1?v[0]:''};
    BST={ids:rows.map(d=>d.id)};
    modal(`<h2>Set status / remarks / buyer</h2><div id="bsterr"></div><p class="muted" style="margin-top:0">Applies to ${rows.length} selected row(s).</p>
-    <datalist id="pslist"><option>PENDING</option><option>PAYMENT FOR PROCESS</option></datalist>
-    <div class="fg"><label class="f">STATUS (column N)<input id="bst_s" list="pslist" value="${esc(same('payStatus'))}" placeholder="PENDING / PAYMENT FOR PROCESS"></label>
+    <datalist id="pslist"><option>PENDING</option><option>PAYMENT FOR PROCESS</option><option>PAID</option></datalist>
+    <div class="fg"><label class="f">STATUS (column N)<input id="bst_s" list="pslist" value="${esc(same('payStatus'))}" placeholder="PENDING / PAYMENT FOR PROCESS / PAID"></label>
      <label class="f">Remarks (column M)<input id="bst_r" value="${esc(same('remarks'))}" placeholder="e.g. NEED TO RE-INVOICE"></label>
      <label class="f">Buyer<select id="bst_b"><option value="__keep" selected>(leave unchanged)</option><option value="">Unassigned (clear)</option>${buyerNames().map(n=>`<option value="${esc(n)}">${esc(buyerLabel(n))}</option>`).join('')}</select></label></div>
     <div class="note">A blank status or remarks field clears that value; Buyer keeps each row's buyer unless you choose one. Rows already marked Received by AP show "Received by …" in the remarks column instead of this text. Neighbouring rows with the same remarks and status merge into one cell, like your sheet.</div>
@@ -1644,6 +1648,7 @@ const A={
  close:()=>closeModal(),
  scrim:(t,e)=>{if(e.target===t&&!TXM_OPEN())closeModal()},
  sort:t=>{const k=t.dataset.k;S.sort=S.sort.k===k?{k,dir:-S.sort.dir}:{k,dir:1};renderOut()},
+ bchip:t=>{const b=t.dataset.b;F.buyer=F.buyer===b?'':b;F.preset='';render()},
  preset:t=>{F.preset=F.preset===t.dataset.k?'':t.dataset.k;render()},
  clearf:()=>{Object.keys(F).forEach(k=>F[k]='');render()},
  saveview:()=>{modal(`<h2>Save filter view</h2><label class="f">Name<input id="vn" placeholder="e.g. Pending, one supplier"></label><div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="savevname">Save view</button></div>`,'s');setTimeout(()=>$('#vn')&&$('#vn').focus(),30)},
@@ -1939,6 +1944,10 @@ document.addEventListener('change',e=>{const t=e.target;
       S.cfg.counter=Math.max(S.cfg.counter,(j.cfg&&j.cfg.counter)||0);await saveCfg();toast(n+' record(s) restored.');render()}catch(err){toast('That file is not a valid backup.')}})}
 });
 document.addEventListener('keydown',e=>{
+  if(e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&/^Digit\d$/.test(e.code||'')&&UID&&!$('#layer').innerHTML&&!TXM_OPEN()){
+    e.preventDefault();const i=+e.code.slice(5),bn=buyerNames();if(i>0&&!bn[i-1])return;
+    F.buyer=i===0?'':bn[i-1];F.preset='';if(!FILTERED_VIEWS.includes(S.view))S.view='register';S.selMode=false;S.sel.clear();render();
+    toast(i===0?'Showing all buyers':'Showing '+buyerLabel(bn[i-1]));return}
   if(TXM_OPEN()&&(e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='z'){const t=e.target;if(!(t&&/INPUT|TEXTAREA|SELECT/.test(t.tagName))){e.preventDefault();txUndo();return}}
   if(e.key==='Enter'&&e.target&&e.target.id==='gsearch'){e.preventDefault();F.q=e.target.value;S.view='register';S.selMode=false;S.sel.clear();render();return}
   if(e.key==='Enter'&&e.target&&e.target.id==='selr'){e.preventDefault();A.selrange();return}
