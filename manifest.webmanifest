@@ -1,7 +1,7 @@
 {
  "name": "AP Transmittal Tracker",
  "short_name": "AP Tracker",
- "id": "./",
+ "id": "/AP-Tracker/",
  "start_url": "./",
  "scope": "./",
  "display": "standalone",
